@@ -351,6 +351,7 @@ bool tchdbsetdfunit(TCHDB *hdb, int32_t dfunit){
 bool tchdbopen(TCHDB *hdb, const char *path, int omode){
   assert(hdb && path);
   if(!HDBLOCKMETHOD(hdb, true)) return false;
+  pmem_init();
   if(hdb->fd >= 0){
     tchdbsetecode(hdb, TCEINVALID, __FILE__, __LINE__, __func__);
     HDBUNLOCKMETHOD(hdb);

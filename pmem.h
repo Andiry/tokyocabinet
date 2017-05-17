@@ -33,13 +33,6 @@
 #ifndef NVML_CPU_H
 #define NVML_CPU_H 1
 
-/*
- * cpu.h -- definitions for "cpu" module
- */
-
-int is_cpu_genuine_intel(void);
-int is_cpu_clflush_present(void);
-int is_cpu_clflushopt_present(void);
-int is_cpu_clwb_present(void);
+void pmem_init(void);
 
 #endif
