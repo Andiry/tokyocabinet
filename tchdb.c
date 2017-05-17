@@ -1328,11 +1328,15 @@ bool tchdbmemsync(TCHDB *hdb, bool phys){
   }
   bool err = false;
   char hbuf[HDBHEADSIZ];
-  tchdbdumpmeta(hdb, hbuf);
-  memcpy(hdb->map, hbuf, HDBOPAQUEOFF);
+  if (hdb->pmem_mode == 0) {
+	tchdbdumpmeta(hdb, hbuf);
+	memcpy(hdb->map, hbuf, HDBOPAQUEOFF);
+  } else {
+	pmem_flush(hdb->map, HDBOPAQUEOFF);
+  }
   if(phys){
     size_t xmsiz = (hdb->xmsiz > hdb->msiz) ? hdb->xmsiz : hdb->msiz;
-    if(msync(hdb->map, xmsiz, MS_SYNC) == -1){
+    if(hdb->pmem_mode == 0 && msync(hdb->map, xmsiz, MS_SYNC) == -1){
       tchdbsetecode(hdb, TCEMMAP, __FILE__, __LINE__, __func__);
       err = true;
     }
@@ -1340,6 +1344,8 @@ bool tchdbmemsync(TCHDB *hdb, bool phys){
       tchdbsetecode(hdb, TCESYNC, __FILE__, __LINE__, __func__);
       err = true;
     }
+    if (hdb->pmem_mode)
+	pmem_drain();
   }
   return !err;
 }
@@ -1852,6 +1858,15 @@ static uint64_t tcgetprime(uint64_t num){
   return primes[i-1];
 }
 
+static void memcpy_to_hdb(TCHDB *hdb, off_t off, const void *buf, size_t size) {
+    if (hdb->pmem_mode == 1) {
+	pmem_memcpy_nodrain(hdb->map + off, buf, size);
+    } else {
+	memcpy(hdb->map + off, buf, size);
+	if (hdb->pmem_mode == 2)
+	    pmem_flush(hdb->map + off, size);
+    }
+}
 
 /* Seek and write data into a file.
    `hdb' specifies the hash database object.
@@ -1872,7 +1887,7 @@ static bool tchdbseekwrite(TCHDB *hdb, off_t off, const void *buf, size_t size){
       }
       hdb->xfsiz = xfsiz;
     }
-    memcpy(hdb->map + off, buf, size);
+    memcpy_to_hdb(hdb, off, buf, size);
     return true;
   }
   if(!TCUBCACHE && off < hdb->xmsiz){
@@ -1885,7 +1900,7 @@ static bool tchdbseekwrite(TCHDB *hdb, off_t off, const void *buf, size_t size){
       hdb->xfsiz = xfsiz;
     }
     int head = hdb->xmsiz - off;
-    memcpy(hdb->map + off, buf, head);
+    memcpy_to_hdb(hdb, off, buf, head);
     off += head;
     buf = (char *)buf + head;
     size -= head;
@@ -2090,6 +2105,7 @@ static void tchdbclear(TCHDB *hdb){
   hdb->walfd = -1;
   hdb->walend = 0;
   hdb->dbgfd = -1;
+  hdb->pmem_mode = 0;
   hdb->cnt_writerec = -1;
   hdb->cnt_reuserec = -1;
   hdb->cnt_moverec = -1;
@@ -3277,7 +3293,7 @@ static int tchdbwalrestore(TCHDB *hdb, const char *path){
       }
       if(!TCUBCACHE && off < xmsiz){
         size = (size <= xmsiz - off) ? size : xmsiz - off;
-        memcpy(hdb->map + off, rec, size);
+	memcpy_to_hdb(hdb, off, rec, size);
       }
     }
     tclistdel(list);

@@ -90,6 +90,7 @@ typedef struct {                         /* type of structure for a hash databas
   int walfd;                             /* file descriptor of write ahead logging */
   uint64_t walend;                       /* end offset of write ahead logging */
   int dbgfd;                             /* file descriptor for debugging */
+  int pmem_mode;                         /* PMEM flush and sync mode */
   volatile int64_t cnt_writerec;         /* tesing counter for record write times */
   volatile int64_t cnt_reuserec;         /* tesing counter for record reuse times */
   volatile int64_t cnt_moverec;          /* tesing counter for record move times */
