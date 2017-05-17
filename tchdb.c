@@ -1340,7 +1340,7 @@ bool tchdbmemsync(TCHDB *hdb, bool phys){
       tchdbsetecode(hdb, TCEMMAP, __FILE__, __LINE__, __func__);
       err = true;
     }
-    if(fsync(hdb->fd) == -1){
+    if(hdb->pmem_mode == 0 && fsync(hdb->fd) == -1){
       tchdbsetecode(hdb, TCESYNC, __FILE__, __LINE__, __func__);
       err = true;
     }
