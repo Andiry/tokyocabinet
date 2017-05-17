@@ -31,7 +31,7 @@
  */
 
 /*
- * cpu.c -- CPU features detection
+ * pmem.c -- CPU features detection and pmem methods
  */
 
 /*
@@ -51,7 +51,7 @@
 #include <string.h>
 #include <stdio.h>
 
-#include "cpu.h"
+#include "pmem.h"
 
 #define EAX_IDX 0
 #define EBX_IDX 1
