@@ -33,6 +33,17 @@
 #ifndef NVML_CPU_H
 #define NVML_CPU_H 1
 
+void pmem_persist(const void *addr, size_t len);
+int pmem_msync(const void *addr, size_t len);
+void pmem_flush(const void *addr, size_t len);
+void pmem_drain(void);
+int pmem_has_hw_drain(void);
+void *pmem_memmove_persist(void *pmemdest, const void *src, size_t len);
+void *pmem_memcpy_persist(void *pmemdest, const void *src, size_t len);
+void *pmem_memset_persist(void *pmemdest, int c, size_t len);
+void *pmem_memmove_nodrain(void *pmemdest, const void *src, size_t len);
+void *pmem_memcpy_nodrain(void *pmemdest, const void *src, size_t len);
+void *pmem_memset_nodrain(void *pmemdest, int c, size_t len);
 void pmem_init(void);
 
 #endif
