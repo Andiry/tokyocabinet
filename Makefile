@@ -22,7 +22,7 @@ FORMATVER = 1.0
 # Targets
 HEADERFILES = tcutil.h tchdb.h tcbdb.h tcfdb.h tctdb.h tcadb.h
 LIBRARYFILES = libtokyocabinet.a libtokyocabinet.so.9.11.0 libtokyocabinet.so.9 libtokyocabinet.so
-LIBOBJFILES = tcutil.o tchdb.o tcbdb.o tcfdb.o tctdb.o tcadb.o myconf.o md5.o
+LIBOBJFILES = tcutil.o tchdb.o tcbdb.o tcfdb.o tctdb.o tcadb.o myconf.o md5.o cpu.o
 COMMANDFILES = tcutest tcumttest tcucodec tchtest tchmttest tchmgr tcbtest tcbmttest tcbmgr tcftest tcfmttest tcfmgr tcttest tctmttest tctmgr tcatest tcamttest tcamgr
 CGIFILES = tcawmgr.cgi
 MAN1FILES = tcutest.1 tcumttest.1 tcucodec.1 tchtest.1 tchmttest.1 tchmgr.1 tcbtest.1 tcbmttest.1 tcbmgr.1 tcftest.1 tcfmttest.1 tcfmgr.1 tcttest.1 tctmttest.1 tctmgr.1 tcatest.1 tcamttest.1 tcamgr.1
@@ -797,6 +797,8 @@ tchdb.o : myconf.h tcutil.h tchdb.h
 
 tcbdb.o : myconf.h tcutil.h tchdb.h tcbdb.h
 
+cpu.o	: cpu.h
+
 tcfdb.o : myconf.h tcutil.h tcfdb.h
 
 tctdb.o : myconf.h tcutil.h tchdb.h tctdb.h
@@ -817,10 +819,10 @@ tcatest.o tcamttest.o tcamgr.o tcawmgr.o : \
   myconf.h tcutil.h tchdb.h tcbdb.h tcfdb.h tctdb.h tcadb.h
 
 
-tokyocabinet_all.c : myconf.c tcutil.c md5.c tchdb.c tcbdb.c tcfdb.c tctdb.c tcadb.c
+tokyocabinet_all.c : myconf.c tcutil.c md5.c tchdb.c tcbdb.c tcfdb.c tctdb.c tcadb.c cpu.c
 	cat myconf.c tcutil.c md5.c tchdb.c tcbdb.c tcfdb.c tctdb.c tcadb.c > $@
 
-tokyocabinet_all.o : myconf.h tcutil.h tchdb.h tcbdb.h tcfdb.h tctdb.h tcadb.h
+tokyocabinet_all.o : myconf.h tcutil.h tchdb.h tcbdb.h tcfdb.h tctdb.h tcadb.h cpu.h
 
 
 

@@ -18,6 +18,7 @@
 #include "tchdb.h"
 #include "tcbdb.h"
 #include "myconf.h"
+#include "cpu.h"
 
 #define HDBFILEMODE    00644             // permission of created files
 #define HDBIOBUFSIZ    8192              // size of an I/O buffer
