@@ -91,6 +91,7 @@ typedef struct {                         /* type of structure for a hash databas
   uint64_t walend;                       /* end offset of write ahead logging */
   int dbgfd;                             /* file descriptor for debugging */
   int pmem_mode;                         /* PMEM flush and sync mode */
+  int falloc;                            /* Enable fallocate for file extension */
   volatile int64_t cnt_writerec;         /* tesing counter for record write times */
   volatile int64_t cnt_reuserec;         /* tesing counter for record reuse times */
   volatile int64_t cnt_moverec;          /* tesing counter for record move times */
@@ -133,6 +134,7 @@ enum {                                   /* enumeration for open modes */
   HDBOTSYNC = 1 << 6,                    /* synchronize every transaction */
   HDBOMOVNT = 1 << 7,                    /* Non-temporal memcpy */
   HDBOFLUSH = 1 << 8,                    /* Efficient cache flushing */
+  HDBOFALLOC = 1 << 9,                   /* Fallocate */
 };
 
 
