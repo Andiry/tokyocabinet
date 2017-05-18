@@ -1858,6 +1858,16 @@ static uint64_t tcgetprime(uint64_t num){
   return primes[i-1];
 }
 
+static void tchdbsetpmemmode(TCHDB *hdb, int omode) {
+    if (omode & HDBOMOVNT) {
+	printf("Set HDB pmem mode to MOVNT\n");
+	hdb->pmem_mode = 1;
+    } else if (omode & HDBOFLUSH) {
+	printf("Set HDB pmem mode to efficient CLFLUSH\n");
+	hdb->pmem_mode = 2;
+    }
+}
+
 static void memcpy_to_hdb(TCHDB *hdb, off_t off, const void *buf, size_t size) {
     if (hdb->pmem_mode == 1) {
 	pmem_memcpy_nodrain(hdb->map + off, buf, size);
@@ -3511,6 +3521,7 @@ static bool tchdbopenimpl(TCHDB *hdb, const char *path, int omode){
   hdb->tran = false;
   hdb->walfd = -1;
   hdb->walend = 0;
+  tchdbsetpmemmode(hdb, omode);
   if(hdb->omode & HDBOWRITER){
     bool err = false;
     if(!(hdb->flags & HDBFOPEN) && !tchdbloadfbp(hdb)) err = true;

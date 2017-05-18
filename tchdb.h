@@ -130,7 +130,9 @@ enum {                                   /* enumeration for open modes */
   HDBOTRUNC = 1 << 3,                    /* writer truncating */
   HDBONOLCK = 1 << 4,                    /* open without locking */
   HDBOLCKNB = 1 << 5,                    /* lock without blocking */
-  HDBOTSYNC = 1 << 6                     /* synchronize every transaction */
+  HDBOTSYNC = 1 << 6,                    /* synchronize every transaction */
+  HDBOMOVNT = 1 << 7,                    /* Non-temporal memcpy */
+  HDBOFLUSH = 1 << 8,                    /* Efficient cache flushing */
 };
 
 
