@@ -1878,6 +1878,11 @@ static void tchdbsetoptimization(TCHDB *hdb, int omode) {
 	/* If we enable mremap we must also enable fallocate */
 	hdb->falloc = 1;
     }
+
+    if (omode & HDBOZEROCOPY) {
+	printf("Enable zero-copy\n");
+	hdb->zerocopy = 1;
+    }
 }
 
 static void memcpy_to_hdb(TCHDB *hdb, off_t off, const void *buf, size_t size) {
@@ -1992,6 +1997,113 @@ again:
       }
     }
   }
+  return true;
+}
+
+/* Seek and write data into a file.
+   `hdb' specifies the hash database object.
+   `rec' specifies the request.
+   `off' specifies the offset of the region to seek.
+   `buf' specifies the buffer to store into.
+   `size' specifies the size of the buffer.
+   The return value is true if successful, else, it is false. */
+static bool tchdbseekwriterec(TCHDB *hdb, TCHREC *rec, off_t off, const void *buf, size_t size){
+  assert(hdb && off >= 0 && buf && size >= 0);
+  if(hdb->tran && !tchdbwalwrite(hdb, off, size)) return false;
+  off_t end = off + size + rec->vsiz;
+  int ret;
+
+again:
+  if(end <= hdb->xmsiz){
+    if(hdb->falloc == 0 && hdb->mremap == 0 &&
+		    end >= hdb->fsiz && end >= hdb->xfsiz){
+      uint64_t xfsiz = end + HDBXFSIZINC;
+      if(ftruncate(hdb->fd, xfsiz) == -1){
+        tchdbsetecode(hdb, TCETRUNC, __FILE__, __LINE__, __func__);
+        return false;
+      }
+      hdb->xfsiz = xfsiz;
+    }
+    memcpy_to_hdb(hdb, off, buf, size);
+    memcpy_to_hdb(hdb, off + size, rec->vbuf, rec->vsiz);
+    return true;
+  }
+
+  if (hdb->falloc && end > hdb->fallocsiz) {
+    fallocate(hdb->fd, 0, hdb->fallocsiz, HDBDEFXMSIZ);
+    hdb->fallocsiz += HDBDEFXMSIZ;
+  }
+
+  if (hdb->mremap) {
+    ret = tchdbextendmap(hdb, HDBDEFXMSIZ);
+    if (ret == 0)
+      goto again;
+  }
+
+#if 0
+  if(!TCUBCACHE && off < hdb->xmsiz){
+    if(hdb->falloc == 0 && hdb->mremap == 0 &&
+		    end >= hdb->fsiz && end >= hdb->xfsiz){
+      uint64_t xfsiz = end + HDBXFSIZINC;
+      if(ftruncate(hdb->fd, xfsiz) == -1){
+        tchdbsetecode(hdb, TCETRUNC, __FILE__, __LINE__, __func__);
+        return false;
+      }
+      hdb->xfsiz = xfsiz;
+    }
+    int head = hdb->xmsiz - off;
+    memcpy_to_hdb(hdb, off, buf, head);
+    off += head;
+    buf = (char *)buf + head;
+    size -= head;
+  }
+#endif
+
+  while(true){
+    int wb = pwrite(hdb->fd, buf, size, off);
+    if(wb >= size){
+      off += size;
+      break;
+    } else if(wb > 0){
+      buf = (char *)buf + wb;
+      size -= wb;
+      off += wb;
+    } else if(wb == -1){
+      if(errno != EINTR){
+        tchdbsetecode(hdb, TCEWRITE, __FILE__, __LINE__, __func__);
+        return false;
+      }
+    } else {
+      if(size > 0){
+        tchdbsetecode(hdb, TCEWRITE, __FILE__, __LINE__, __func__);
+        return false;
+      }
+    }
+  }
+
+  size = rec->vsiz;
+  buf = rec->vbuf;
+  while(true){
+    int wb = pwrite(hdb->fd, buf, size, off);
+    if(wb >= size){
+      return true;
+    } else if(wb > 0){
+      buf = (char *)buf + wb;
+      size -= wb;
+      off += wb;
+    } else if(wb == -1){
+      if(errno != EINTR){
+        tchdbsetecode(hdb, TCEWRITE, __FILE__, __LINE__, __func__);
+        return false;
+      }
+    } else {
+      if(size > 0){
+        tchdbsetecode(hdb, TCEWRITE, __FILE__, __LINE__, __func__);
+        return false;
+      }
+    }
+  }
+
   return true;
 }
 
@@ -2176,6 +2288,7 @@ static void tchdbclear(TCHDB *hdb){
   hdb->falloc = 0;
   hdb->fallocsiz = 0;
   hdb->mremap = 0;
+  hdb->zerocopy = 0;
   hdb->cnt_writerec = -1;
   hdb->cnt_reuserec = -1;
   hdb->cnt_moverec = -1;
@@ -2835,14 +2948,26 @@ static bool tchdbwriterec(TCHDB *hdb, TCHREC *rec, uint64_t bidx, off_t entoff){
   memcpy(wp, rec->kbuf, rec->ksiz);
   wp += rec->ksiz;
   rsiz -= rec->ksiz;
-  memcpy(wp, rec->vbuf, rec->vsiz);
-  wp += rec->vsiz;
-  rsiz -= rec->vsiz;
-  memset(wp, 0, rsiz);
-  if(!tchdbseekwrite(hdb, rec->off, rbuf, rec->rsiz)){
-    if(rbuf != stack) TCFREE(rbuf);
-    return false;
+
+  if (hdb->zerocopy == 0) {
+    memcpy(wp, rec->vbuf, rec->vsiz);
+    wp += rec->vsiz;
+    rsiz -= rec->vsiz;
+    memset(wp, 0, rsiz);
+    if(!tchdbseekwrite(hdb, rec->off, rbuf, rec->rsiz)){
+      if(rbuf != stack) TCFREE(rbuf);
+      return false;
+    }
+  } else {
+    wp += rec->vsiz;
+    rsiz -= rec->vsiz;
+    memset(wp, 0, rsiz);
+    if(!tchdbseekwriterec(hdb, rec, rec->off, rbuf, rec->rsiz - rec->vsiz)){
+      if(rbuf != stack) TCFREE(rbuf);
+      return false;
+    }
   }
+
   if(finc != 0){
     hdb->fsiz += finc;
     uint64_t llnum = hdb->fsiz;
