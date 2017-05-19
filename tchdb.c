@@ -1871,6 +1871,13 @@ static void tchdbsetoptimization(TCHDB *hdb, int omode) {
 	printf("Enable fallocate for file extension\n");
 	hdb->falloc = 1;
     }
+
+    if (omode & HDBOREMAP) {
+	printf("Enable mremap\n");
+	hdb->mremap = 1;
+	/* If we enable mremap we must also enable fallocate */
+	hdb->falloc = 1;
+    }
 }
 
 static void memcpy_to_hdb(TCHDB *hdb, off_t off, const void *buf, size_t size) {
@@ -1883,17 +1890,18 @@ static void memcpy_to_hdb(TCHDB *hdb, off_t off, const void *buf, size_t size) {
     }
 }
 
-static int tchdbextendfile(TCHDB *hdb, size_t size) {
+static int tchdbextendmap(TCHDB *hdb, size_t size) {
     size_t new_size = hdb->xmsiz + size;
     void* map;
+    int ret = 0;
 
     HDBLOCKDB(hdb);
-    fallocate(hdb->fd, 0, hdb->xmsiz, size);
+
     map = mremap(hdb->map, hdb->xmsiz, new_size, MREMAP_MAYMOVE);
     if (map == MAP_FAILED) {
 	printf("%s: failed %s\n", __func__, strerror(errno));
-	HDBUNLOCKDB(hdb);
-	return -1;
+	ret = -1;
+	goto out;
     }
 
     hdb->map = map;
@@ -1902,10 +1910,12 @@ static int tchdbextendfile(TCHDB *hdb, size_t size) {
     else
 	hdb->ba32 = (uint32_t *)((char *)map + HDBHEADSIZ);
 
-    hdb->xmsiz = new_size;
     printf("%s: extend size to %lu\n", __func__, new_size);
+    hdb->xmsiz = new_size;
+
+out:
     HDBUNLOCKDB(hdb);
-    return 0;
+    return ret;
 }
 
 /* Seek and write data into a file.
@@ -1922,7 +1932,8 @@ static bool tchdbseekwrite(TCHDB *hdb, off_t off, const void *buf, size_t size){
 
 again:
   if(end <= hdb->xmsiz){
-    if(hdb->falloc == 0 && end >= hdb->fsiz && end >= hdb->xfsiz){
+    if(hdb->falloc == 0 && hdb->mremap == 0 &&
+		    end >= hdb->fsiz && end >= hdb->xfsiz){
       uint64_t xfsiz = end + HDBXFSIZINC;
       if(ftruncate(hdb->fd, xfsiz) == -1){
         tchdbsetecode(hdb, TCETRUNC, __FILE__, __LINE__, __func__);
@@ -1934,14 +1945,20 @@ again:
     return true;
   }
 
-  if (hdb->falloc) {
-    ret = tchdbextendfile(hdb, HDBDEFXMSIZ);
+  if (hdb->falloc && end > hdb->fallocsiz) {
+    fallocate(hdb->fd, 0, hdb->fallocsiz, HDBDEFXMSIZ);
+    hdb->fallocsiz += HDBDEFXMSIZ;
+  }
+
+  if (hdb->mremap) {
+    ret = tchdbextendmap(hdb, HDBDEFXMSIZ);
     if (ret == 0)
       goto again;
   }
 
   if(!TCUBCACHE && off < hdb->xmsiz){
-    if(hdb->falloc == 0 && end >= hdb->fsiz && end >= hdb->xfsiz){
+    if(hdb->falloc == 0 && hdb->mremap == 0 &&
+		    end >= hdb->fsiz && end >= hdb->xfsiz){
       uint64_t xfsiz = end + HDBXFSIZINC;
       if(ftruncate(hdb->fd, xfsiz) == -1){
         tchdbsetecode(hdb, TCETRUNC, __FILE__, __LINE__, __func__);
@@ -2157,6 +2174,8 @@ static void tchdbclear(TCHDB *hdb){
   hdb->dbgfd = -1;
   hdb->pmem_mode = 0;
   hdb->falloc = 0;
+  hdb->fallocsiz = 0;
+  hdb->mremap = 0;
   hdb->cnt_writerec = -1;
   hdb->cnt_reuserec = -1;
   hdb->cnt_moverec = -1;
@@ -3518,8 +3537,10 @@ static bool tchdbopenimpl(TCHDB *hdb, const char *path, int omode){
   }
   size_t xmsiz = (hdb->xmsiz > msiz) ? hdb->xmsiz : msiz;
   if(!(omode & HDBOWRITER) && xmsiz > hdb->fsiz) xmsiz = hdb->fsiz;
-  if (hdb->falloc)
+  if (hdb->falloc) {
     fallocate(fd, 0, 0, xmsiz);
+    hdb->fallocsiz = xmsiz;
+  }
   void *map = mmap(0, xmsiz, PROT_READ | ((omode & HDBOWRITER) ? PROT_WRITE : 0),
                    MAP_SHARED, fd, 0);
   if(map == MAP_FAILED){

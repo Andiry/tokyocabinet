@@ -92,6 +92,8 @@ typedef struct {                         /* type of structure for a hash databas
   int dbgfd;                             /* file descriptor for debugging */
   int pmem_mode;                         /* PMEM flush and sync mode */
   int falloc;                            /* Enable fallocate for file extension */
+  uint64_t fallocsiz;                    /* size of fallocate */
+  int mremap;                            /* Extend mmap region */
   volatile int64_t cnt_writerec;         /* tesing counter for record write times */
   volatile int64_t cnt_reuserec;         /* tesing counter for record reuse times */
   volatile int64_t cnt_moverec;          /* tesing counter for record move times */
@@ -135,6 +137,7 @@ enum {                                   /* enumeration for open modes */
   HDBOMOVNT = 1 << 7,                    /* Non-temporal memcpy */
   HDBOFLUSH = 1 << 8,                    /* Efficient cache flushing */
   HDBOFALLOC = 1 << 9,                   /* Fallocate */
+  HDBOREMAP = 1 << 10,                   /* Mremap */
 };
 
 
