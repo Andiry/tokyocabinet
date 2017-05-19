@@ -1883,6 +1883,31 @@ static void memcpy_to_hdb(TCHDB *hdb, off_t off, const void *buf, size_t size) {
     }
 }
 
+static int tchdbextendfile(TCHDB *hdb, size_t size) {
+    size_t new_size = hdb->xmsiz + size;
+    void* map;
+
+    HDBLOCKDB(hdb);
+    fallocate(hdb->fd, 0, hdb->xmsiz, size);
+    map = mremap(hdb->map, hdb->xmsiz, new_size, MREMAP_MAYMOVE);
+    if (map == MAP_FAILED) {
+	printf("%s: failed %s\n", __func__, strerror(errno));
+	HDBUNLOCKDB(hdb);
+	return -1;
+    }
+
+    hdb->map = map;
+    if(hdb->opts & HDBTLARGE)
+	hdb->ba64 = (uint64_t *)((char *)map + HDBHEADSIZ);
+    else
+	hdb->ba32 = (uint32_t *)((char *)map + HDBHEADSIZ);
+
+    hdb->xmsiz = new_size;
+    printf("%s: extend size to %lu\n", __func__, new_size);
+    HDBUNLOCKDB(hdb);
+    return 0;
+}
+
 /* Seek and write data into a file.
    `hdb' specifies the hash database object.
    `off' specifies the offset of the region to seek.
@@ -1893,6 +1918,9 @@ static bool tchdbseekwrite(TCHDB *hdb, off_t off, const void *buf, size_t size){
   assert(hdb && off >= 0 && buf && size >= 0);
   if(hdb->tran && !tchdbwalwrite(hdb, off, size)) return false;
   off_t end = off + size;
+  int ret;
+
+again:
   if(end <= hdb->xmsiz){
     if(hdb->falloc == 0 && end >= hdb->fsiz && end >= hdb->xfsiz){
       uint64_t xfsiz = end + HDBXFSIZINC;
@@ -1905,6 +1933,13 @@ static bool tchdbseekwrite(TCHDB *hdb, off_t off, const void *buf, size_t size){
     memcpy_to_hdb(hdb, off, buf, size);
     return true;
   }
+
+  if (hdb->falloc) {
+    ret = tchdbextendfile(hdb, HDBDEFXMSIZ);
+    if (ret == 0)
+      goto again;
+  }
+
   if(!TCUBCACHE && off < hdb->xmsiz){
     if(hdb->falloc == 0 && end >= hdb->fsiz && end >= hdb->xfsiz){
       uint64_t xfsiz = end + HDBXFSIZINC;
