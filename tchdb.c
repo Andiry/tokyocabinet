@@ -2954,7 +2954,7 @@ static bool tchdbwriterec_direct(TCHDB *hdb, TCHREC *rec, uint64_t bidx, off_t e
   rsiz -= rec->vsiz;
   memset(wp, 0, rsiz);
 
-//  pmem_flush(hdb->map + rec->off, rec->rsiz);
+  pmem_flush(hdb->map + rec->off, rec->rsiz);
 
   if(finc != 0){
     hdb->fsiz += finc;
